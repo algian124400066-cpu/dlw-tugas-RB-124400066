@@ -1,0 +1,323 @@
+
+\documentclass[conference,a4paper]{IEEEtran}
+\IEEEoverridecommandlockouts
+ 
+\usepackage[indonesian]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{gambar/}}
+ 
+\newcommand{\isi}[1]{\textcolor{red}{[#1]}}
+% gambar aman: bila berkas belum ada tampil kotak placeholder
+\newcommand{\gbr}[2]{\IfFileExists{gambar/#1}{\includegraphics[width=#2]{gambar/#1}}{\fbox{\parbox{#2}{\centering\vspace{1em}\small\texttt{\detokenize{#1}} belum ada\vspace{1em}}}}}
+ 
+\begin{document}
+ 
+\title{Studi Ablasi RNN, LSTM, dan GRU dibandingkan ANN untuk Prediksi Trafik Seluler Bandara Linate}
+ 
+\author{
+\IEEEauthorblockN{Algian Dika Reza}
+\IEEEauthorblockA{NIM 124400066\\
+Teknik Telekomunikasi, ITERA\\
+algian.124400066@student.itera.ac.id}
+\and
+\IEEEauthorblockN{Sulthan Fawwaz}
+\IEEEauthorblockA{NIM 124400028\\
+Teknik Telekomunikasi, ITERA\\
+sulthan.124400028@student.itera.ac.id}
+\and
+\IEEEauthorblockN{Najwa Ambia}
+\IEEEauthorblockA{NIM 124400025\\
+Teknik Telekomunikasi, ITERA\\
+najwa.124400025@student.itera.ac.id}
+}
+ 
+\maketitle
+ 
+\begin{abstract}
+Prediksi trafik internet per jam pada tingkat sel penting bagi operator seluler untuk perencanaan kapasitas, penjadwalan sumber daya, dan efisiensi energi. Studi ini membandingkan jaringan saraf berlapis (ANN) dengan tiga model sekuensial, yaitu RNN, LSTM, dan GRU, memakai data Telecom Italia Big Data Challenge pada kotak Duomo (5060) dan lokasi kelompok, yaitu sekitar Bandara Linate (kotak 4489) yang bertrafik rendah. Kami menjalankan studi ablasi, yaitu mengubah satu faktor setiap kali, pada lima faktor wajib (A1--A5) dan dua faktor pilihan, masing-masing dengan tiga seed. Kinerja diukur dengan MAE dan MAPE pada skala asli. Pada konfigurasi acuan, RNN terbaik dengan test MAE $229.6\pm5.1$, diikuti GRU ($237.2\pm9.3$), LSTM ($273.6\pm25.4$), dan ANN ($309.9\pm5.9$); semuanya mengalahkan baseline naif terkuat ($467.6$) pada minggu test. Ablasi menunjukkan ANN memburuk seiring panjang jendela, sedangkan LSTM dan GRU paling diuntungkan oleh \textit{learning rate} $10^{-2}$ dan ukuran \textit{hidden} yang lebih besar.
+\end{abstract}
+ 
+\begin{IEEEkeywords}
+prediksi trafik seluler, RNN, LSTM, GRU, studi ablasi
+\end{IEEEkeywords}
+ 
+\section{Pendahuluan}
+Pertumbuhan layanan data seluler membuat beban trafik pada tiap sel berubah cepat menurut jam, hari, dan peristiwa khusus. Operator yang mampu meramal trafik per sel dapat mengalokasikan kapasitas secara proaktif, mematikan sel yang sepi untuk menghemat energi, dan mengantisipasi kemacetan jaringan sebelum terjadi. Karena itu, prediksi trafik jangka pendek menjadi masalah penting dalam perencanaan dan operasi jaringan.
+ 
+Trafik seluler memiliki pola harian dan mingguan yang kuat. Pola ini mendorong penggunaan model sekuensial yang memanfaatkan urutan waktu, yaitu RNN, LSTM \cite{hochreiter1997lstm}, dan GRU \cite{cho2014gru}. Model-model tersebut diharapkan lebih baik daripada ANN yang memperlakukan jendela masukan sebagai vektor datar tanpa struktur urutan. Namun, keunggulan model sekuensial tidak otomatis berlaku pada semua konfigurasi. Kinerjanya dipengaruhi banyak hyperparameter, seperti panjang jendela, ukuran \textit{hidden}, dan laju belajar, sehingga perbandingan yang hanya memakai satu konfigurasi dapat menyesatkan.
+ 
+Studi ablasi mengubah satu faktor setiap kali sambil menjaga faktor lain tetap, sehingga pengaruh tiap faktor dapat diisolasi. Dengan mengulang setiap konfigurasi pada tiga seed, kami juga dapat menilai apakah selisih antar model lebih besar daripada variasi acak akibat inisialisasi. Kontribusi laporan ini:
+\begin{itemize}
+  \item perbandingan ANN, RNN, LSTM, dan GRU pada prediksi trafik internet per jam dengan tiga seed dan dua metrik;
+  \item studi ablasi lima faktor wajib dan dua faktor pilihan beserta hipotesis awal dan pengujiannya;
+  \item uji generalisasi dari kotak pusat kota (Duomo) ke lokasi bertrafik rendah di sekitar Bandara Linate.
+\end{itemize}
+ 
+\begin{figure}[t]
+  \centering
+  \gbr{peta_lokasi_tugas.png}{0.85\linewidth}
+  \caption{Rata-rata aktivitas internet per kotak di Milan. Lingkaran kuning: lokasi tugas (kode 0--9); lingkaran toska: Duomo.}
+  \label{fig:peta}
+\end{figure}
+ 
+\section{Data dan Metode}
+\subsection{Dataset}
+Data berasal dari Telecom Italia Big Data Challenge \cite{barlacchi2015milan}, dalam versi agregasi per jam yang dipakai pada \cite{zhang2021fedda}. Wilayah Milan dibagi menjadi kotak-kotak berukuran seragam, dan setiap kotak memiliki tiga deret aktivitas, yaitu \textit{net} (internet), \textit{call}, dan \textit{sms}. Periode data 4 November--29 Desember 2013 dengan resolusi 1 jam (56 hari, 1344 jam).
+ 
+Kami memakai dua lokasi. Lokasi pertama adalah Duomo (kotak 5060) di pusat kota, yang bertrafik tinggi dan menjadi lokasi utama ablasi. Lokasi kedua adalah lokasi kelompok, yaitu kode 5, Bandara Linate (kotak 4489), yang dipakai untuk uji generalisasi. Posisi kedua kotak ditunjukkan pada Gambar~\ref{fig:peta}.
+ 
+\subsection{Pembagian Data dan Praproses}
+Data dibagi berdasarkan waktu menjadi empat bagian: train (11 Nov--8 Des, 672 jam), validasi (9--15 Des, 168 jam), test (16--22 Des, 168 jam), dan minggu Natal (23--29 Des, 168 jam); minggu pertama (4--10 Nov) hanya menjadi konteks jendela. Minggu Natal dipisahkan karena pola trafiknya menyimpang dari minggu biasa, sehingga bagian ini menguji ketahanan model terhadap pergeseran distribusi.
+ 
+Data deret waktu tidak boleh diacak. Pengacakan akan menempatkan sampel masa depan di data latih dan sampel masa lalu di data uji, sehingga informasi bocor dan hasil evaluasi menjadi terlalu optimis. Pembagian kronologis meniru kondisi nyata, yaitu model dilatih dari masa lalu lalu dipakai meramal masa depan.
+ 
+\begin{table}[t]
+  \centering
+  \caption{Konfigurasi acuan}
+  \label{tab:acuan}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    Hyperparameter & Nilai acuan \\
+    \midrule
+    Panjang jendela $W$ & 24 jam \\
+    Horizon & 1 jam \\
+    Ukuran hidden & ANN 32, RNN 68, LSTM 33, GRU 38 \\
+    Jumlah lapisan & ANN 2, rekuren 1 \\
+    Fitur & net, call, sms, jam, hari (7) \\
+    Optimizer, \textit{learning rate} & Adam, $10^{-3}$ \\
+    \textit{Batch size} & 64 \\
+    \textit{Early stopping} & \textit{patience} 30, maks.\ 300 epoch \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+Standarisasi memakai rerata dan simpangan baku yang dihitung hanya dari data sebelum minggu validasi, lalu diterapkan ke semua bagian, sehingga tidak ada kebocoran statistik. Sampel dibentuk dengan \textit{sliding window}: $W$ jam terakhir menjadi masukan dan trafik pada jam berikutnya menjadi target. Fitur tiap langkah waktu adalah net, call, sms, serta penanda jam dan hari dalam seminggu (dalam bentuk sin--cos).
+ 
+\subsection{Model dan Konfigurasi Acuan}
+Misalkan $\mathbf{x}_t\in\mathbb{R}^d$ adalah vektor fitur pada jam ke-$t$ dan $\hat{y}$ adalah prediksi trafik jam berikutnya.
+ 
+\textbf{ANN.} Jendela $\mathbf{x}_{t-W+1:t}$ diratakan menjadi satu vektor, lalu diproses perceptron berlapis ReLU. Model ini tidak memiliki mekanisme urutan.
+ 
+\textbf{RNN.} Keadaan tersembunyi diperbarui secara rekuren,
+\begin{equation}
+\mathbf{h}_t=\tanh(\mathbf{W}_x\mathbf{x}_t+\mathbf{W}_h\mathbf{h}_{t-1}+\mathbf{b}),
+\end{equation}
+dan $\hat{y}$ diperoleh dari $\mathbf{h}_t$ pada langkah terakhir. RNN sederhana rentan terhadap gradien menghilang pada jendela panjang.
+ 
+\textbf{LSTM.} LSTM \cite{hochreiter1997lstm} menambahkan sel memori $\mathbf{c}_t$ dan tiga gerbang (masukan, lupa, keluaran):
+\begin{align}
+\mathbf{c}_t&=\mathbf{f}_t\odot\mathbf{c}_{t-1}+\mathbf{i}_t\odot\tilde{\mathbf{c}}_t,\\
+\mathbf{h}_t&=\mathbf{o}_t\odot\tanh(\mathbf{c}_t).
+\end{align}
+ 
+\textbf{GRU.} GRU \cite{cho2014gru} menyederhanakan LSTM menjadi dua gerbang (pembaruan dan reset) tanpa sel memori terpisah,
+\begin{equation}
+\mathbf{h}_t=(1-\mathbf{z}_t)\odot\mathbf{h}_{t-1}+\mathbf{z}_t\odot\tilde{\mathbf{h}}_t.
+\end{equation}
+ 
+Ukuran \textit{hidden} acuan dipilih agar jumlah parameter setara (ANN 6497, RNN 5305, LSTM 5578, GRU 5397), sehingga perbandingan tidak dimenangkan oleh model yang kebetulan lebih besar (Tabel~\ref{tab:acuan}).
+ 
+\subsection{Protokol Ablasi dan Evaluasi}
+Pada setiap percobaan hanya satu faktor diubah, sedangkan faktor lain tetap pada nilai acuan (Tabel~\ref{tab:faktor}). Setiap konfigurasi dilatih dengan seed 0, 1, 2 dan dilaporkan sebagai rata-rata $\pm$ simpangan baku. \textit{Early stopping} memakai MSE validasi.
+ 
+\begin{table}[t]
+  \centering
+  \caption{Faktor ablasi, nilai yang diuji, dan hipotesis awal}
+  \label{tab:faktor}
+  \scriptsize
+  \setlength{\tabcolsep}{2.5pt}
+  \begin{tabular}{@{}llp{1.9cm}p{3.6cm}@{}}
+    \toprule
+    Kode & Faktor & Nilai diuji & Hipotesis \\
+    \midrule
+    A1 & Panjang jendela $W$ & 6, 12, 24, 48, 168 jam & Jendela lebih panjang membantu model rekuren menangkap pola harian/mingguan, tetapi merugikan ANN karena parameternya membengkak dan memicu \textit{overfit}. \\
+    A2 & Ukuran \textit{hidden} & 16, 32, 64, 128 & Model lebih besar membaik hingga titik jenuh; pada 672 sampel latih ANN lebih cepat \textit{overfit} daripada model rekuren. \\
+    A3 & Jumlah lapisan & 1, 2, 3 & Lapisan tambahan tidak membantu pada data sekecil ini dan membuat model lebih cepat \textit{overfit}. \\
+    A4 & \textit{Learning rate} & $10^{-4}$, $10^{-3}$, $10^{-2}$ & $10^{-4}$ belum konvergen dalam 300 epoch; $10^{-2}$ lebih tidak stabil antar seed; $10^{-3}$ terbaik. \\
+    A5 & Kelompok fitur & net; net+call+sms; net+waktu; semua & Fitur waktu (jam, hari) paling berguna dan lebih dibutuhkan model rekuren daripada ANN; call/sms memberi manfaat kecil. \\
+    B1 & \textit{Batch size} & 16, 64, 256 & Batch kecil memberi pembaruan lebih sering sehingga lebih baik tetapi lebih lambat; batch 256 kurang baik. \\
+    B2 & \textit{Gradient clipping} (lr $10^{-2}$) & tanpa, 0.5, 1.0 & Clipping menstabilkan RNN pada \textit{learning rate} besar. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+Metrik dihitung pada skala asli (setelah standarisasi dibalik):
+\begin{align}
+\text{MAE}&=\frac{1}{N}\sum_{i=1}^{N}\lvert y_i-\hat{y}_i\rvert,\\
+\text{MAPE}&=\frac{100}{N}\sum_{i=1}^{N}\left\lvert\frac{y_i-\hat{y}_i}{y_i}\right\rvert.
+\end{align}
+MAE mudah ditafsirkan dalam satuan trafik, dan MAPE memberi galat relatif tetapi dapat membesar ketika trafik mendekati nol, yang relevan untuk Linate. Konfigurasi terbaik tiap model dipilih dengan val MAE, bukan test MAE. Sebagai pembanding dipakai tiga baseline naif: ``nilai terakhir'' (jam sebelumnya), ``kemarin'' (jam yang sama sehari sebelumnya), dan ``minggu lalu'' (jam yang sama seminggu sebelumnya). Eksperimen dijalankan pada CPU (tanpa GPU) dengan total waktu training 119.5 menit untuk 276 run.
+ 
+\section{Hasil}
+\subsection{Baseline Naif dan Acuan}
+Tabel~\ref{tab:acuanhasil} membandingkan baseline naif dengan keempat model pada konfigurasi acuan di Duomo. Pada minggu test semua model mengalahkan ketiga baseline naif; baseline terkuat adalah ``minggu lalu'' (467.6). RNN terbaik (229.6$\pm$5.1), 50.9\% di bawah baseline terkuat dan 25.9\% di bawah ANN. Selisih RNN dan GRU (7.6) sebanding dengan simpangan baku antar seed (5.1 dan 9.3), sehingga keduanya tidak dapat dibedakan dengan tiga seed; LSTM memiliki variasi terbesar ($\pm$25.4). Pada minggu Natal gambarnya berbeda: baseline ``nilai terakhir'' (431.2) hanya dikalahkan RNN (421.2$\pm$2.4, selisih 2.3\%), sedangkan GRU, LSTM, dan ANN lebih buruk. Baseline ``minggu lalu'' gagal total di Natal (1426.2) karena pola mingguan berubah.
+ 
+\begin{table}[t]
+  \centering
+  \caption{Hasil konfigurasi acuan di Duomo (rata-rata $\pm$ simpangan baku, 3 seed).}
+  \label{tab:acuanhasil}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    & \multicolumn{2}{c}{Minggu test} & Natal \\
+    \cmidrule(lr){2-3}
+    Model & MAE & MAPE (\%) & MAE \\
+    \midrule
+    Naif: nilai terakhir & 600.9 & -- & 431.2 \\
+    Naif: kemarin & 552.2 & -- & 921.5 \\
+    Naif: minggu lalu & 467.6 & -- & 1426.2 \\
+    ANN  & $309.9\pm5.9$ & $11.3\pm0.8$ & $680.1\pm52.0$ \\
+    RNN  & $\mathbf{229.6\pm5.1}$ & $8.5\pm0.3$ & $\mathbf{421.2\pm2.4}$ \\
+    LSTM & $273.6\pm25.4$ & $9.1\pm1.0$ & $586.0\pm56.8$ \\
+    GRU  & $237.2\pm9.3$ & $\mathbf{8.0\pm0.7}$ & $468.2\pm21.8$ \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+ 
+\subsection{Ablasi Wajib}
+\textbf{A1 (panjang jendela).} Tabel~\ref{tab:a1} dan Gambar~\ref{fig:a1} menunjukkan bahwa ANN memburuk secara monoton seiring $W$ (test MAE 269.4 pada $W{=}6$ menjadi 402.0 pada $W{=}168$), sementara jumlah parameternya membengkak dari 2465 menjadi 38753; epoch berhenti juga makin awal (166.7 menjadi 76.3), tanda \textit{overfit} pada hanya 672 sampel latih. Model rekuren memiliki jumlah parameter tetap dan nyaris tidak terpengaruh: RNN berkisar 224.5--233.5 dan GRU 237.1--249.8. LSTM berfluktuasi (273.6--304.4) tanpa tren yang jelas dengan simpangan baku hingga 27. Hipotesis A1 terbukti sebagian: kerugian jendela panjang pada ANN terbukti, tetapi model rekuren tidak mendapat manfaat dari jendela yang lebih panjang.
+ 
+\begin{table}[t]
+  \centering
+  \caption{Pengaruh panjang jendela $W$ terhadap test MAE (rata-rata $\pm$ simpangan baku, 3 seed).}
+  \label{tab:a1}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}rcccc@{}}
+    \toprule
+    $W$ (jam) & ANN & RNN & LSTM & GRU \\
+    \midrule
+    6   & $269.4\pm16.8$ & $\mathbf{228.6\pm5.4}$  & $276.3\pm14.7$ & $249.8\pm1.4$ \\
+    12  & $308.8\pm11.6$ & $\mathbf{233.2\pm11.2}$ & $302.7\pm17.4$ & $246.1\pm13.5$ \\
+    24  & $309.9\pm5.9$  & $\mathbf{229.6\pm5.1}$  & $273.6\pm25.4$ & $237.2\pm9.3$ \\
+    48  & $333.1\pm20.3$ & $\mathbf{224.5\pm11.7}$ & $304.4\pm27.1$ & $237.1\pm10.6$ \\
+    168 & $402.0\pm12.5$ & $\mathbf{233.5\pm4.8}$  & $292.8\pm20.0$ & $237.2\pm10.6$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+ 
+\begin{figure}[t]
+  \centering
+  \gbr{a1_W.png}{\linewidth}
+  \caption{Pengaruh panjang jendela terhadap val MAE (kiri) dan test MAE (kanan); pita = simpangan baku antar seed.}
+  \label{fig:a1}
+\end{figure}
+ 
+\textbf{A2 (ukuran \textit{hidden}).} Model rekuren membaik seiring ukuran \textit{hidden} (Gambar~\ref{fig:a2a5}a). LSTM paling diuntungkan: test MAE turun dari 295.3 ($h{=}16$) ke 245.6 ($h{=}128$), atau 16.8\%; GRU turun dari 246.9 ke 220.3, RNN dari 253.3 ke 234.6. ANN hampir tidak berubah (296.8--316.2) dengan simpangan baku hingga 32. Pada $h{=}128$ jumlah parameter tidak lagi setara (RNN 17665, ANN 38273, GRU 52737, LSTM 70273), tetapi RNN dengan 17.7 ribu parameter (234.6) tetap jauh lebih baik daripada ANN dengan 15 ribu parameter ($h{=}64$, 316.2). Jadi keunggulan model rekuren bukan sekadar soal ukuran. Hipotesis A2 terbukti: model rekuren membaik dengan \textit{hidden} lebih besar, sedangkan ANN tidak.
+ 
+\textbf{A3 (jumlah lapisan).} Menumpuk lapisan tidak membantu (Gambar~\ref{fig:a2a5}b). LSTM paling terdampak: test MAE 273.6 (1 lapisan), 308.9 (2), 412.6 (3), naik 50.8\%, dan val MAE 230.5 menjadi 338.9. RNN dan GRU stabil pada 1--2 lapisan lalu memburuk pada 3 lapisan (245.5 dan 264.2). ANN tidak berubah bermakna (311.8, 309.9, 299.8; simpangan baku hingga 25). Epoch berhenti RNN, GRU, dan ANN cenderung makin awal pada model yang lebih dalam (RNN 163.7, 124.7, 96.0), konsisten dengan \textit{overfit} lebih cepat pada data kecil. Hipotesis A3 terbukti.
+ 
+\textbf{A4 (\textit{learning rate}).} Pada $10^{-4}$ semua model berhenti di batas 300 epoch dan belum konvergen, sehingga MAE terburuk (LSTM 373.5, GRU 356.3, ANN 339.7, RNN 287.9; Gambar~\ref{fig:a2a5}c). Pada $10^{-2}$ LSTM dan GRU justru terbaik: 225.8$\pm$4.2 (turun 17.5\% dari acuan) dan 215.7$\pm$10.9 (turun 9.1\%), dengan training hanya sekitar 62--68 epoch. RNN lebih baik pada $10^{-3}$ (229.6 vs.\ 245.8). ANN menjadi tidak stabil pada $10^{-2}$: simpangan baku 53.2, sembilan kali lipat nilainya pada $10^{-3}$ (5.9). Hipotesis A4 terbukti sebagian: ketidakkonvergenan pada $10^{-4}$ dan ketidakstabilan ANN pada $10^{-2}$ sesuai dugaan, tetapi $10^{-3}$ bukan yang terbaik bagi LSTM dan GRU.
+ 
+\textbf{A5 (kelompok fitur).} Menurut val MAE, kelompok ``semua'' terbaik untuk RNN, LSTM, dan GRU, sedangkan untuk ANN ``net+waktu'' (246.0) hanya unggul tipis atas ``semua'' (248.9). Penambahan fitur waktu (net $\to$ net+waktu) menurunkan val MAE lebih besar pada model rekuren (RNN 9.1\%, LSTM 13.2\%, GRU 19.4\%) daripada ANN (5.6\%), sehingga model rekuren lebih membutuhkan fitur waktu. Panggilan dan SMS juga membantu (GRU 264.6 $\to$ 231.8). Namun pada minggu Natal, ANN justru terbaik dengan fitur ``net'' saja (394.7 vs.\ 680.1 untuk ``semua''), kemungkinan karena fitur jam dan hari mengajarkan pola hari kerja yang tidak berlaku pada hari libur (dugaan, belum diuji). Hipotesis A5 terbukti sebagian: kebutuhan fitur waktu yang lebih besar pada model rekuren sesuai dugaan, tetapi panggilan dan SMS ternyata memberi manfaat yang bukan kecil.
+ 
+\begin{figure*}[t]
+  \centering
+  \gbr{a2a5.png}{0.95\textwidth}
+  \caption{Ablasi A2--A5 (val dan test MAE): (a) ukuran \textit{hidden}, (b) jumlah lapisan, (c) \textit{learning rate}, (d) kelompok fitur. Susunan panel kiri ke kanan, atas ke bawah.}
+  \label{fig:a2a5}
+\end{figure*}
+ 
+\subsection{Ablasi Pilihan}
+Kami memilih dua faktor tambahan. Untuk B1 (\textit{batch size}), hipotesis awal kami adalah batch kecil lebih baik tetapi lebih lambat. Pada batch 16, GRU mencapai test MAE $232.2\pm10.3$ (batch 64: $237.2\pm9.3$) dengan waktu training sekitar 128 detik per run dibanding 70 detik, yaitu 1.8 kali lebih lama; selisih MAE-nya masih di dalam simpangan baku, sehingga batch kecil tidak memberi keuntungan yang bermakna. Pada batch 256, ANN ($320.1\pm29.0$ vs.\ $309.9\pm5.9$) dan RNN ($258.9\pm32.5$ vs.\ $229.6\pm5.1$) lebih buruk dengan variasi antar seed membesar, dan epoch berhenti rata-rata naik (ANN 106 menjadi 255, RNN 164 menjadi 272); dua run (ANN seed 1 dan RNN seed 0) berhenti di batas 300 epoch. Hipotesis B1 terbukti sebagian: ``batch 256 kurang baik'' dan ``batch kecil lebih lambat'' didukung, tetapi ``batch kecil lebih baik'' tidak terbukti. Dengan demikian batch 64 pada konfigurasi acuan merupakan pilihan yang wajar. Batch 16 untuk ANN, RNN, dan LSTM, serta batch 256 untuk LSTM dan GRU, tidak diselesaikan sehingga tidak dilaporkan. Untuk B2 (\textit{gradient clipping}), hipotesis awal kami adalah clipping menstabilkan RNN pada \textit{learning rate} $10^{-2}$. Percobaan ini tidak sempat dijalankan, sehingga hipotesisnya belum teruji; sebagai rujukan, tanpa clipping pada $10^{-2}$ RNN mencapai test MAE $245.8$ dan simpangan baku ANN $53.2$ (A4).
+ 
+\subsection{Konfigurasi Terbaik}
+Pemilihan per faktor dengan val MAE menghasilkan perubahan terbaik pada Tabel~\ref{tab:terbaik}. Perubahan tunggal yang dipilih memberi test MAE berikut: ANN $W{=}6$ 269.4 (turun 13.1\%), RNN $W{=}48$ 224.5 (turun 2.2\%, di dalam simpangan baku), LSTM $h{=}128$ 245.6 (10.2\%) dan $\text{lr}{=}10^{-2}$ 225.8 (17.5\%), GRU $h{=}128$ 220.3 (7.1\%). Penggabungan semua faktor terbaik dalam satu konfigurasi tidak kami jalankan; karena faktor dapat saling memengaruhi, gabungan itu belum tentu lebih baik daripada perubahan tunggalnya.
+ 
+\begin{table}[t]
+  \centering
+  \caption{Konfigurasi terbaik tiap model dari ablasi satu faktor (dipilih dengan val MAE) dan test MAE-nya, 3 seed.}
+  \label{tab:terbaik}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{@{}llcc@{}}
+    \toprule
+    Model & Perubahan terbaik & Test MAE & Acuan \\
+    \midrule
+    ANN  & $W{=}6$ & 269.4 & 309.9 \\
+    RNN  & $W{=}48$ & 224.5 & 229.6 \\
+    LSTM & $h{=}128$ & 245.6 & 273.6 \\
+    GRU  & $h{=}128$ & 220.3 & 237.2 \\
+    Naif & -- & 467.6 & -- \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+ 
+\subsection{Uji Generalisasi}
+Uji ini memakai konfigurasi acuan pada Linate (kotak 4489), seperti ditunjukkan Tabel~\ref{tab:linate}. Urutan model pada minggu test sama dengan Duomo: RNN dan GRU (7.5) lebih baik daripada LSTM (8.2) dan ANN (8.8), dan semuanya mengalahkan baseline naif terbaik (``nilai terakhir'', 10.1); selisih ANN terhadap RNN mengecil menjadi sekitar 15\% (di Duomo 26\%). Pada val MAE urutannya berbeda (RNN 8.5, ANN 8.7, GRU 9.2, LSTM 9.3), sehingga pemilihan konfigurasi dengan val MAE di lokasi ini kurang andal. Pada minggu Natal baseline ``nilai terakhir'' (7.1) mengalahkan semua model (10.8--14.4), seperti di Duomo. Pola trafik Linate (Gambar~\ref{fig:lokasi}) berbeda dari Duomo: puncaknya hanya sekitar 150 dibanding lebih dari 8000, kurvanya jauh lebih berisik, dan terdapat lonjakan tunggal sekitar pertengahan Desember. Karena penyebut kecil, MAPE di sini bernilai besar (8.4--10.3\%) meski MAE hanya 7.5--8.8. Konfigurasi terbaik hasil ablasi Duomo tidak diuji ulang di Linate, sehingga generalisasi hanya dinilai pada konfigurasi acuan.
+ 
+\begin{figure}[t]
+  \centering
+  \gbr{d_pola_lokasi.png}{\linewidth}
+  \caption{Aktivitas internet per jam di Duomo (atas) dan Bandara Linate (bawah).}
+  \label{fig:lokasi}
+\end{figure}
+ 
+\begin{table}[t]
+  \centering
+  \caption{Uji generalisasi di Linate (4489) pada konfigurasi acuan (rata-rata $\pm$ simpangan baku, 3 seed).}
+  \label{tab:linate}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    & \multicolumn{3}{c}{Minggu test} & Natal \\
+    \cmidrule(lr){2-4}
+    Model & Val MAE & MAE & MAPE (\%) & MAE \\
+    \midrule
+    Naif: nilai terakhir & -- & 10.1 & -- & 7.1 \\
+    ANN  & $8.7\pm0.0$ & $8.8\pm0.7$ & $10.3\pm1.0$ & $14.4\pm0.5$ \\
+    RNN  & $8.5\pm0.1$ & $\mathbf{7.5\pm0.1}$ & $8.5\pm0.1$ & $10.8\pm0.1$ \\
+    LSTM & $9.3\pm0.1$ & $8.2\pm0.2$ & $9.3\pm0.4$ & $12.8\pm0.8$ \\
+    GRU  & $9.2\pm0.1$ & $\mathbf{7.5\pm0.2}$ & $\mathbf{8.4\pm0.4}$ & $11.4\pm0.9$ \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+ 
+\section{Pembahasan}
+\textbf{Faktor paling berpengaruh.} \textit{Learning rate} paling menentukan, terutama karena $10^{-4}$ tidak konvergen dalam 300 epoch (LSTM 225.8--373.5). Setelahnya, ukuran \textit{hidden} penting bagi LSTM dan GRU, panjang jendela bagi ANN (269.4--402.0), dan jumlah lapisan bagi LSTM (273.6--412.6). Sebaliknya, panjang jendela hampir tidak memengaruhi RNN dan GRU, dan jumlah lapisan 1 vs.\ 2 hampir tidak memengaruhi ANN, RNN, dan GRU. Kemiripan hasil GRU pada $W\ge24$ (237.1--237.2 dengan epoch berhenti sama) menunjukkan model ini kemungkinan terutama memakai informasi jam-jam terakhir (dugaan).
+ 
+\textbf{Model sekuensial versus ANN.} RNN dan GRU lebih baik daripada ANN pada hampir semua konfigurasi, tetapi LSTM tidak: pada acuan LSTM kalah dari RNN dan GRU, dan ANN dengan $W{=}6$ (269.4) setara LSTM (276.3). Karena parameter model rekuren tidak bergantung pada $W$ dan bobotnya dipakai bersama di semua langkah, mereka tidak \textit{overfit} pada jendela panjang seperti ANN. LSTM yang membaik tajam pada $10^{-2}$ menunjukkan bahwa kekalahannya pada $10^{-3}$ kemungkinan karena optimasi yang lebih lambat pada data kecil (672 sampel), bukan keterbatasan arsitektur; gerbang LSTM juga tidak diperlukan karena dependensi yang dibutuhkan bersifat harian dan pendek (dugaan).
+ 
+\textbf{Perbedaan antar model dan antar seed.} Selisih ANN terhadap RNN (80.3) jauh melampaui simpangan baku (5--6), tetapi selisih RNN--GRU (7.6) tidak bermakna dengan tiga seed, dan LSTM, yang simpangan bakunya hingga 27, sering tumpang tindih dengan ANN.
+ 
+\textbf{Pergeseran distribusi.} Pada minggu Natal di Duomo dan Linate, baseline ``nilai terakhir'' setara atau lebih baik daripada hampir semua model (hanya RNN di Duomo yang sedikit lebih baik), sehingga model yang dilatih pada minggu biasa tidak tangguh terhadap pola hari libur. Di Linate, urutan model pada minggu test tetap sama dengan Duomo meskipun skala trafiknya sekitar 50 kali lebih kecil.
+ 
+\textbf{Keterbatasan.} Studi ini hanya memakai satu kota, data latih sekitar empat minggu, dan satu kali pembagian waktu, sehingga kesimpulan belum tentu berlaku pada kota atau periode lain. Jumlah seed yang hanya tiga membatasi kekuatan inferensi statistik, dan ablasi satu faktor tidak menangkap interaksi antarfaktor. Selain itu, B1 hanya selesai sebagian, B2 tidak dijalankan, dan konfigurasi gabungan serta konfigurasi terbaik di Linate tidak diuji. Penelitian lanjutan dapat memakai validasi bergulir, lebih banyak lokasi, dan horizon prediksi lebih panjang.
+ 
+\\section{Kesimpulan}
+Studi ini membandingkan ANN, RNN, LSTM, dan GRU pada prediksi trafik internet per jam di Duomo, lalu menguji generalisasinya ke Bandara Linate, melalui ablasi lima faktor wajib (A1--A5) dan satu faktor pilihan (B1), masing-masing dengan tiga seed.
+
+\textbf{Perbandingan model.} Pada konfigurasi acuan, RNN dan GRU mengungguli ANN dan LSTM (test MAE 229.6 dan 237.2 vs.\ 309.9 dan 273.6), dan semua model mengalahkan baseline naif terkuat (467.6) pada minggu test. RNN berada 50.9\% di bawah baseline tersebut dan 25.9\% di bawah ANN. Selisih RNN dan GRU tidak dapat dibedakan dengan tiga seed, sedangkan LSTM memiliki variasi antar seed terbesar. Pada minggu Natal, hampir semua model kalah dari baseline sederhana ``nilai terakhir''; hanya RNN yang sedikit lebih baik (421.2 vs.\ 431.2). Model yang dilatih pada minggu biasa karenanya belum tangguh terhadap pola hari libur.
+
+\textbf{Pengaruh tiap faktor.} ANN memburuk seiring panjang jendela (269.4 pada $W{=}6$ menjadi 402.0 pada $W{=}168$) karena jumlah parameternya membengkak dari 2465 menjadi 38753 pada hanya 672 sampel latih, sedangkan RNN dan GRU nyaris tidak terpengaruh. Ukuran \textit{hidden} yang lebih besar paling menguntungkan LSTM (295.3 menjadi 245.6), tetapi tidak mengubah ANN secara bermakna. Menumpuk lapisan merugikan terutama LSTM (273.6 menjadi 412.6 pada tiga lapisan). \textit{Learning rate} $10^{-4}$ belum konvergen dalam 300 epoch pada semua model, sedangkan $10^{-2}$ justru terbaik bagi LSTM (225.8) dan GRU (215.7) meski membuat ANN tidak stabil antar seed. Fitur waktu (jam dan hari) menurunkan val MAE lebih besar pada model rekuren daripada pada ANN. Pada B1, batch 256 cenderung merugikan ANN dan RNN, sedangkan batch 16 memperlambat training GRU sekitar 1.8 kali tanpa selisih MAE yang bermakna, sehingga batch 64 pada konfigurasi acuan merupakan pilihan yang wajar.
+
+\textbf{Generalisasi.} Di Linate, yang trafiknya sekitar 50 kali lebih kecil, urutan model pada minggu test sama dengan di Duomo: RNN dan GRU (7.5), LSTM (8.2), lalu ANN (8.8), semuanya di bawah baseline naif terbaik (10.1). Pada minggu Natal, baseline ``nilai terakhir'' (7.1) mengalahkan semua model (10.8--14.4), seperti di Duomo.
+
+\textbf{Keterbatasan dan pekerjaan lanjutan.} Kesimpulan ini terbatas pada satu kota, data latih sekitar empat minggu, dan tiga seed. Konfigurasi gabungan dari faktor-faktor terbaik dan \textit{gradient clipping} (B2) tidak sempat diuji, sehingga keduanya menjadi pekerjaan lanjutan, bersama validasi bergulir, lebih banyak lokasi, dan horizon prediksi yang lebih panjang.
+ 
+\section*{Kontribusi Anggota}
+\begin{tabular}{@{}lp{0.62\linewidth}@{}}
+  Algian Dika Reza (Ketua) & Mengerjakan eksperimen dan notebook, serta menyusun laporan. \\
+  Sulthan Fawwaz & Membantu membaca data. \\
+  Najwa Ambia & Membantu membaca data. \\
+\end{tabular}
+ 
+\section*{Pernyataan Penggunaan AI}
+Kami memakai Claude (Anthropic) untuk menyusun kerangka templat \LaTeX, merangkum keluaran notebook menjadi teks laporan, dan merapikan bahasa. Seluruh angka berasal dari run kami sendiri, dan seluruh isi laporan telah kami periksa.
+ 
+\section*{Kode dan Data}
+Kode, notebook beserta output, dan seluruh hasil run tersedia di \url{https://github.com/algian124400066-cpu/dlw-tugas-RB-124400066}.
+ 
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+ 
+\end{document}
+ 
+
